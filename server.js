@@ -1,6 +1,4 @@
-// index.js
 const express = require("express");
-// const bodyParser = require("body-parser");
 const cors = require("cors");
 require("dotenv").config();
 
@@ -10,9 +8,9 @@ const projectRouter = require("./routes/project");
 const app = express();
 const PORT = process.env.PORT;
 
-// // Middlewares
-// app.use(bodyParser.json({ limit: "10mb" })); // or higher if needed
-// app.use(bodyParser.urlencoded({ limit: "10mb", extended: true }));
+// ✅ Use built-in body parsers with size limit
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
 app.use(cors());
 
