@@ -1,9 +1,13 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
+const multer = require("multer");
+const cloudinary = require("../utils/cloudinary"); // yaha apni cloudinary config import kar
 const router = express.Router();
 require("dotenv").config();
 
-const { getProjects, saveProjects } = require("../utils/projectStorage.js"); // Updated util name
+const { projectCollection } = require("../firebase"); // sirf firestore use ho raha hai
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const verifyToken = (req, res, next) => {
   const authHeader = req.header("authorization");
@@ -18,69 +22,158 @@ const verifyToken = (req, res, next) => {
   });
 };
 
-// GET all projects (public)
-router.get("/", (req, res) => {
-  const projects = getProjects();
-  res.json(projects);
+router.get("/", async (req, res) => {
+  try {
+    const snapshot = await projectCollection.get();
+    const projects = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+    res.json(projects);
+  } catch (error) {
+    console.error("Error fetching projects:", error);
+    res.status(500).json({ error: "Failed to fetch projects" });
+  }
 });
-
-// POST a new project (admin only)
-router.post("/", verifyToken, (req, res) => {
+// POST new project (with Cloudinary upload)
+router.post("/", verifyToken, upload.single("image"), async (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ error: "Access denied" });
   }
 
-  const projects = getProjects();
-  const { title, description, image, link } = req.body;
+  const { title, description, link } = req.body;
+  const file = req.file;
 
-  const newProject = {
-    id: Date.now(),
-    title,
-    description,
-    image,
-    link,
-    createdBy: req.user.username,
-  };
+  if (!file) {
+    return res.status(400).json({ error: "Image file is required" });
+  }
 
-  projects.push(newProject);
-  saveProjects(projects);
+  try {
+    // Cloudinary upload (buffer to base64)
+    const result = await cloudinary.uploader.upload_stream(
+      { folder: "projects" },
+      async (error, result) => {
+        if (error) {
+          console.error("Cloudinary upload error:", error);
+          return res.status(500).json({ error: "Failed to upload image" });
+        }
+        // Save project in Firestore with Cloudinary URL
+        const docRef = await projectCollection.add({
+          title,
+          description,
+          image: result.secure_url,
+          cloudinary_id: result.public_id, // store Cloudinary public_id for delete/update use
+          link,
+          createdBy: req.user.username,
+          createdAt: new Date(),
+        });
 
-  res.status(201).json(newProject);
+        res.status(201).json({
+          id: docRef.id,
+          title,
+          description,
+          image: result.secure_url,
+          link,
+          createdBy: req.user.username,
+        });
+      }
+    );
+
+    // Write buffer to stream
+    require("streamifier").createReadStream(file.buffer).pipe(result);
+  } catch (err) {
+    console.error("Error creating project:", err);
+    res.status(500).json({ error: "Failed to add project" });
+  }
 });
 
-// PUT to update project
-router.put("/:id", verifyToken, (req, res) => {
+// PUT update project (optional image update)
+router.put("/:id", verifyToken, upload.single("image"), async (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ error: "Access denied" });
   }
 
-  const projects = getProjects();
-  const project = projects.find((p) => p.id === parseInt(req.params.id));
-  if (!project) return res.status(404).json({ error: "Project not found" });
+  const projectId = req.params.id;
+  const { title, description, link } = req.body;
+  const file = req.file;
 
-  project.title = req.body.title || project.title;
-  project.description = req.body.description || project.description;
-  project.image = req.body.image || project.image;
-  project.link = req.body.link || project.link;
+  try {
+    const docRef = projectCollection.doc(projectId);
+    const doc = await docRef.get();
 
-  saveProjects(projects);
-  res.json(project);
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    let imageUrl = doc.data().image;
+    let cloudinaryId = doc.data().cloudinary_id;
+
+    if (file) {
+      // Delete old image from Cloudinary if exists
+      if (cloudinaryId) {
+        await cloudinary.uploader.destroy(cloudinaryId);
+      }
+
+      // Upload new image
+      const uploadResult = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: "projects" },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+        require("streamifier").createReadStream(file.buffer).pipe(stream);
+      });
+
+      imageUrl = uploadResult.secure_url;
+      cloudinaryId = uploadResult.public_id;
+    }
+
+    await docRef.update({
+      title: title ?? doc.data().title,
+      description: description ?? doc.data().description,
+      image: imageUrl,
+      cloudinary_id: cloudinaryId,
+      link: link ?? doc.data().link,
+      updatedAt: new Date(),
+    });
+
+    const updatedDoc = await docRef.get();
+    res.json({ id: updatedDoc.id, ...updatedDoc.data() });
+  } catch (err) {
+    console.error("Error updating project:", err);
+    res.status(500).json({ error: "Failed to update project" });
+  }
 });
 
-// DELETE a project
-router.delete("/:id", verifyToken, (req, res) => {
+// DELETE project (admin only)
+router.delete("/:id", verifyToken, async (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ error: "Access denied" });
   }
 
-  let projects = getProjects();
-  const index = projects.findIndex((p) => p.id === parseInt(req.params.id));
-  if (index === -1) return res.status(404).json({ error: "Project not found" });
+  const projectId = req.params.id;
 
-  projects.splice(index, 1);
-  saveProjects(projects);
+  try {
+    const docRef = projectCollection.doc(projectId);
+    const doc = await docRef.get();
 
-  res.status(204).send();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    // Delete image from Cloudinary if exists
+    if (doc.data().cloudinary_id) {
+      await cloudinary.uploader.destroy(doc.data().cloudinary_id);
+    }
+
+    await docRef.delete();
+    res.status(204).send();
+  } catch (err) {
+    console.error("Error deleting project:", err);
+    res.status(500).json({ error: "Failed to delete project" });
+  }
 });
 
 module.exports = router;
