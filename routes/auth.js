@@ -3,11 +3,12 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const router = express.Router();
+const { adminPassword, adminUsername } = require("../utils/config");
 
 const users = [
   {
-    username: process.env.ADMIN_USERNAME,
-    password: bcrypt.hashSync(process.env.ADMIN_PASSWORD, 10),
+    username: adminUsername,
+    password: bcrypt.hashSync(adminPassword, 10),
     role: "admin",
   },
 ];
