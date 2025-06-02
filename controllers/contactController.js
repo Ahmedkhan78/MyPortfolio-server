@@ -50,8 +50,21 @@ const getContactById = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch contact" });
   }
 };
+
+const deleteContact = async (req, res) => {
+  const { id } = req.params;
+  try {
+    await contactCollection.doc(id).delete();
+    res.json({ success: true, message: "Contact deleted successfully" });
+  } catch (err) {
+    console.error("Error deleting contact:", err);
+    res.status(500).json({ error: "Failed to delete contact" });
+  }
+};
+
 module.exports = {
   handleContactForm,
   getContact,
   getContactById,
+  deleteContact,
 };
