@@ -23,6 +23,35 @@ const handleContactForm = async (req, res) => {
   }
 };
 
+const getContact = async (req, res) => {
+  try {
+    const snapshot = await contactCollection.orderBy("timestamp", "desc").get();
+    const contacts = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+    res.json(contacts);
+  } catch (err) {
+    console.error("Error fetching contacts:", err);
+    res.status(500).json({ error: "Failed to fetch contacts" });
+  }
+};
+
+const getContactById = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const doc = await contactCollection.doc(id).get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Contact not found" });
+    }
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (err) {
+    console.error("Error fetching contact by id:", err);
+    res.status(500).json({ error: "Failed to fetch contact" });
+  }
+};
 module.exports = {
   handleContactForm,
+  getContact,
+  getContactById,
 };
