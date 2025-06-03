@@ -1,5 +1,5 @@
 const cloudinary = require("cloudinary").v2;
-require("dotenv").config();
+require("dotenv").config({ path: "/etc/secrets/.env" });
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,

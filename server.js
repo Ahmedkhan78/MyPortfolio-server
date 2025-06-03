@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-require("dotenv").config();
+require("dotenv").config({ path: "/etc/secrets/.env" });
 
 const authRoutes = require("./routes/auth");
 const projectRouter = require("./routes/projectRoute");
