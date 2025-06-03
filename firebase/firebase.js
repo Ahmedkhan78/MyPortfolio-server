@@ -1,10 +1,13 @@
 const admin = require("firebase-admin");
 const fs = require("fs");
+const path = "/etc/secrets/serviceaccount.json";
 
-// Read the secret file from Render’s mounted path
-const serviceAccount = JSON.parse(
-  fs.readFileSync("/etc/secrets/serviceaccount.json", "utf8")
-);
+if (!fs.existsSync(path)) {
+  console.error("❌ serviceaccount.json file is missing at", path);
+  process.exit(1); // exit early
+}
+
+const serviceAccount = JSON.parse(fs.readFileSync(path, "utf8"));
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
