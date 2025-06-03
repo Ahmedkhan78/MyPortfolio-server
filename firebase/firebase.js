@@ -1,7 +1,7 @@
 const admin = require("firebase-admin");
 const fs = require("fs");
 
-const serviceAccountPath = "/etc/secrets/serviceaccount.json";
+const serviceAccountPath = "/etc/secrets/serviceAccountKey.json";
 
 if (!fs.existsSync(serviceAccountPath)) {
   console.error("❌ serviceaccount.json is missing at", serviceAccountPath);
