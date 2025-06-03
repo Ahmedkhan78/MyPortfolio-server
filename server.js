@@ -39,6 +39,9 @@ app.use("/api/auth", authRoutes);
 app.use("/api/project", projectRouter);
 app.use("/api/contact", contactRoute);
 app.use("/api", resumeRoutes);
+app.get("/", (req, res) => {
+  res.send("✅ MyPortfolio API is running");
+});
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
