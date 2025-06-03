@@ -12,8 +12,6 @@ const handleContactForm = async (req, res) => {
       timestamp: new Date(),
     });
 
-    // await transporter.sendMail({ ... }) // optional
-
     res
       .status(200)
       .json({ success: true, message: "Contact saved and email sent" });
