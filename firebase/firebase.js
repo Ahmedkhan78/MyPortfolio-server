@@ -1,7 +1,6 @@
 const admin = require("firebase-admin");
 const fs = require("fs");
 
-// ✅ Use correct Render secret file path
 const serviceAccountPath = "/etc/secrets/serviceaccount.json";
 
 if (!fs.existsSync(serviceAccountPath)) {
@@ -9,8 +8,12 @@ if (!fs.existsSync(serviceAccountPath)) {
   process.exit(1);
 }
 
-const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
+let serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
 
+// Ensure the private_key field has newlines properly inserted
+serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
+
+// Initialize Firebase Admin SDK
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
