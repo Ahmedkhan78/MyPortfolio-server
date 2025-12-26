@@ -6,7 +6,7 @@ const authRoutes = require("./routes/auth");
 const projectRouter = require("./routes/projectRoute");
 const contactRoute = require("./routes/contactRoute");
 const resumeRoutes = require("./routes/resume");
-
+const certificateRoute = require("./routes/certificateRoute");
 const app = express();
 const PORT = process.env.PORT;
 
@@ -18,7 +18,6 @@ const allowedOrigins = [
   "https://ahmeddev-pi.vercel.app",
   "https://ahmeddev-git-main-ahmeds-projects-0032f4c9.vercel.app",
   "https://ahmed-lgj4g35fd-ahmeds-projects-0032f4c9.vercel.app",
-  "http://localhost:3000", // for local dev
 ];
 
 app.use(
@@ -38,6 +37,7 @@ app.use(
 app.use("/api/auth", authRoutes);
 app.use("/api/project", projectRouter);
 app.use("/api/contact", contactRoute);
+app.use("/api/certificate", certificateRoute);
 app.use("/api", resumeRoutes);
 app.get("/", (req, res) => {
   res.send("✅ MyPortfolio API is running");
