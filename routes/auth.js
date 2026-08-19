@@ -3,8 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const QRCode = require("qrcode");
-const { generateURI, verify } = require("otplib");
+const { verify } = require("otplib");
 
 const router = express.Router();
 
@@ -23,256 +22,50 @@ const users = [
 ];
 
 // ======================================================
-// MFA SETUP
+// AUTH CONFIG CHECK
+// ======================================================
+
+const getAuthConfigError = () => {
+  if (!process.env.JWT_SECRET) {
+    return "JWT_SECRET is not configured";
+  }
+
+  if (!process.env.ADMIN_TOTP_SECRET) {
+    return "ADMIN_TOTP_SECRET is not configured";
+  }
+
+  return null;
+};
+
+// ======================================================
+// MFA UNLOCK
 // ======================================================
 //
-// IMPORTANT:
-// Setup endpoint ko production mein public mat chhodna.
-// Isko sirf initial setup ke time use karo.
+// Secret keyboard code ke baad frontend yahan
+// Authenticator ka 6-digit code bhejega.
 //
+// Ye actual login JWT nahi banata.
+// Sirf 5 minute ka temporary unlock token banata hai.
+// ======================================================
 
-router.get("/setup-mfa", async (req, res) => {
+router.post("/unlock", async (req, res) => {
   try {
-    const secret = process.env.ADMIN_TOTP_SECRET;
+    const configError = getAuthConfigError();
 
-    if (!secret) {
-      return res.status(500).send("MFA is not configured.");
+    if (configError) {
+      console.error(configError);
+
+      return res.status(500).json({
+        success: false,
+        error: "Authentication service is not configured",
+      });
     }
 
-    const otpauth = generateURI({
-      issuer: "Ahmed.Dev",
-      label: adminUsername,
-      secret,
-    });
+    const { code } = req.body || {};
 
-    const qrCode = await QRCode.toDataURL(otpauth);
-
-    res.send(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Ahmed.Dev MFA Setup</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-
-          <style>
-            * {
-              box-sizing: border-box;
-            }
-
-            body {
-              margin: 0;
-              min-height: 100vh;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              background: #111827;
-              color: white;
-              font-family: Arial, sans-serif;
-            }
-
-            .container {
-              width: calc(100% - 40px);
-              max-width: 420px;
-              padding: 35px;
-              text-align: center;
-              background: #1f2937;
-              border-radius: 16px;
-              box-shadow: 0 20px 50px rgba(0,0,0,.35);
-            }
-
-            img {
-              width: 280px;
-              max-width: 100%;
-              padding: 12px;
-              margin: 20px 0;
-              background: white;
-              border-radius: 12px;
-            }
-
-            input {
-              width: 100%;
-              padding: 14px;
-              font-size: 22px;
-              text-align: center;
-              letter-spacing: 6px;
-              border: none;
-              outline: none;
-              border-radius: 8px;
-            }
-
-            button {
-              width: 100%;
-              padding: 14px;
-              margin-top: 15px;
-              border: none;
-              border-radius: 8px;
-              background: #3182ce;
-              color: white;
-              font-size: 16px;
-              cursor: pointer;
-            }
-
-            #message {
-              margin-top: 15px;
-              font-weight: bold;
-            }
-
-            .success {
-              color: #68d391;
-            }
-
-            .error {
-              color: #fc8181;
-            }
-          </style>
-        </head>
-
-        <body>
-
-          <div class="container">
-
-            <h1>Ahmed.Dev MFA</h1>
-
-            <p>
-              Scan this QR code using your Authenticator app.
-            </p>
-
-            <img
-              src="${qrCode}"
-              alt="MFA QR Code"
-            />
-
-            <p>
-              Account:
-              <strong>${adminUsername}</strong>
-            </p>
-
-            <input
-              id="code"
-              type="text"
-              inputmode="numeric"
-              autocomplete="one-time-code"
-              maxlength="6"
-              placeholder="123456"
-            />
-
-            <button onclick="confirmMFA()">
-              Confirm MFA
-            </button>
-
-            <div id="message"></div>
-
-          </div>
-
-          <script>
-
-            async function confirmMFA() {
-
-              const input =
-                document.getElementById("code");
-
-              const message =
-                document.getElementById("message");
-
-              const code =
-                input.value
-                  .replace(/\\D/g, "")
-                  .slice(0, 6);
-
-              if (!/^\\d{6}$/.test(code)) {
-
-                message.className = "error";
-
-                message.textContent =
-                  "Enter the 6-digit Authenticator code.";
-
-                return;
-              }
-
-              message.className = "";
-
-              message.textContent =
-                "Verifying...";
-
-              try {
-
-                const response =
-                  await fetch(
-                    "/api/auth/confirm-mfa",
-                    {
-                      method: "POST",
-
-                      headers: {
-                        "Content-Type":
-                          "application/json"
-                      },
-
-                      body: JSON.stringify({
-                        code
-                      })
-                    }
-                  );
-
-                const data =
-                  await response.json();
-
-                if (!response.ok) {
-                  throw new Error(
-                    data.error ||
-                    "MFA verification failed"
-                  );
-                }
-
-                message.className =
-                  "success";
-
-                message.textContent =
-                  "✓ MFA connected successfully!";
-
-                input.value = "";
-
-              } catch (error) {
-
-                message.className =
-                  "error";
-
-                message.textContent =
-                  error.message;
-              }
-            }
-
-            document
-              .getElementById("code")
-              .addEventListener(
-                "keydown",
-                (event) => {
-
-                  if (event.key === "Enter") {
-                    confirmMFA();
-                  }
-
-                }
-              );
-
-          </script>
-
-        </body>
-      </html>
-    `);
-  } catch (error) {
-    console.error("MFA setup error:", error);
-
-    res.status(500).send("Unable to setup MFA.");
-  }
-});
-
-// ======================================================
-// CONFIRM MFA
-// ======================================================
-
-router.post("/confirm-mfa", async (req, res) => {
-  try {
-    const { code } = req.body;
+    // ----------------------------------------------
+    // CODE VALIDATION
+    // ----------------------------------------------
 
     if (!/^\d{6}$/.test(code || "")) {
       return res.status(400).json({
@@ -281,17 +74,12 @@ router.post("/confirm-mfa", async (req, res) => {
       });
     }
 
-    const secret = process.env.ADMIN_TOTP_SECRET;
-
-    if (!secret) {
-      return res.status(500).json({
-        success: false,
-        error: "MFA is not configured",
-      });
-    }
+    // ----------------------------------------------
+    // VERIFY AUTHENTICATOR
+    // ----------------------------------------------
 
     const result = await verify({
-      secret,
+      secret: process.env.ADMIN_TOTP_SECRET,
       token: code,
     });
 
@@ -302,16 +90,30 @@ router.post("/confirm-mfa", async (req, res) => {
       });
     }
 
-    return res.json({
+    // ----------------------------------------------
+    // CREATE TEMPORARY UNLOCK TOKEN
+    // ----------------------------------------------
+
+    const accessToken = jwt.sign(
+      {
+        purpose: "login-unlock",
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "5m",
+      },
+    );
+
+    return res.status(200).json({
       success: true,
-      message: "Authenticator verified successfully",
+      accessToken,
     });
   } catch (error) {
-    console.error("MFA confirmation error:", error);
+    console.error("MFA unlock error:", error);
 
     return res.status(500).json({
       success: false,
-      error: "Unable to verify MFA",
+      error: "Unable to verify authenticator",
     });
   }
 });
@@ -320,23 +122,69 @@ router.post("/confirm-mfa", async (req, res) => {
 // LOGIN
 // ======================================================
 //
-// username + password + authenticator code
+// Flow:
 //
-// ONLY this endpoint creates the actual JWT.
-//
+// Secret code
+//      ↓
+// Authenticator
+//      ↓
+// /unlock
+//      ↓
+// Temporary unlock token
+//      ↓
+// /login
+//      ↓
+// Username + password
+//      ↓
+// REAL JWT
+// ======================================================
 
 router.post("/login", async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const configError = getAuthConfigError();
+
+    if (configError) {
+      console.error(configError);
+
+      return res.status(500).json({
+        success: false,
+        error: "Authentication service is not configured",
+      });
+    }
+
+    const { username, password, unlockToken } = req.body || {};
 
     // ==================================================
     // INPUT VALIDATION
     // ==================================================
 
-    if (!username || !password) {
+    if (!username || !password || !unlockToken) {
       return res.status(400).json({
         success: false,
-        error: "Username and password are required",
+        error: "Username, password and MFA verification are required",
+      });
+    }
+
+    // ==================================================
+    // VERIFY MFA UNLOCK TOKEN
+    // ==================================================
+
+    let unlockPayload;
+
+    try {
+      unlockPayload = jwt.verify(unlockToken, process.env.JWT_SECRET);
+    } catch (error) {
+      return res.status(401).json({
+        success: false,
+        error:
+          "MFA verification expired. Please verify your Authenticator again.",
+      });
+    }
+
+    if (!unlockPayload || unlockPayload.purpose !== "login-unlock") {
+      return res.status(401).json({
+        success: false,
+        error: "Invalid login verification",
       });
     }
 
@@ -367,17 +215,8 @@ router.post("/login", async (req, res) => {
     }
 
     // ==================================================
-    // JWT
+    // CREATE REAL JWT
     // ==================================================
-
-    if (!process.env.JWT_SECRET) {
-      console.error("JWT_SECRET is not configured");
-
-      return res.status(500).json({
-        success: false,
-        error: "Authentication service is not configured",
-      });
-    }
 
     const token = jwt.sign(
       {
@@ -394,7 +233,7 @@ router.post("/login", async (req, res) => {
     // SUCCESS
     // ==================================================
 
-    return res.json({
+    return res.status(200).json({
       success: true,
       token,
       user: {
