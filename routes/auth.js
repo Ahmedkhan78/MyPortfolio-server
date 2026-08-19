@@ -48,7 +48,7 @@ const getAuthConfigError = () => {
 // Sirf 5 minute ka temporary unlock token banata hai.
 // ======================================================
 
-router.post("/unlock", async (req, res) => {
+router.post("/confirm-mfa", async (req, res) => {
   try {
     const configError = getAuthConfigError();
 
