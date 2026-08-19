@@ -141,50 +141,16 @@ router.post("/confirm-mfa", async (req, res) => {
 
 router.post("/login", async (req, res) => {
   try {
-    const configError = getAuthConfigError();
-
-    if (configError) {
-      console.error(configError);
-
-      return res.status(500).json({
-        success: false,
-        error: "Authentication service is not configured",
-      });
-    }
-
-    const { username, password, unlockToken } = req.body || {};
+    const { username, password } = req.body;
 
     // ==================================================
     // INPUT VALIDATION
     // ==================================================
 
-    if (!username || !password || !unlockToken) {
+    if (!username || !password) {
       return res.status(400).json({
         success: false,
-        error: "Username, password and MFA verification are required",
-      });
-    }
-
-    // ==================================================
-    // VERIFY MFA UNLOCK TOKEN
-    // ==================================================
-
-    let unlockPayload;
-
-    try {
-      unlockPayload = jwt.verify(unlockToken, process.env.JWT_SECRET);
-    } catch (error) {
-      return res.status(401).json({
-        success: false,
-        error:
-          "MFA verification expired. Please verify your Authenticator again.",
-      });
-    }
-
-    if (!unlockPayload || unlockPayload.purpose !== "login-unlock") {
-      return res.status(401).json({
-        success: false,
-        error: "Invalid login verification",
+        error: "Username and password are required",
       });
     }
 
@@ -215,8 +181,17 @@ router.post("/login", async (req, res) => {
     }
 
     // ==================================================
-    // CREATE REAL JWT
+    // JWT
     // ==================================================
+
+    if (!process.env.JWT_SECRET) {
+      console.error("JWT_SECRET is not configured");
+
+      return res.status(500).json({
+        success: false,
+        error: "Authentication service is not configured",
+      });
+    }
 
     const token = jwt.sign(
       {
@@ -233,7 +208,7 @@ router.post("/login", async (req, res) => {
     // SUCCESS
     // ==================================================
 
-    return res.status(200).json({
+    return res.json({
       success: true,
       token,
       user: {
